@@ -113,19 +113,24 @@ def error_handler(update: Update, context: CallbackContext):
     logger.error(f"Update {update} caused error {context.error}")
 
 def main():
+    # Create the Updater and pass it your bot's token
     updater = Updater(API_TOKEN, use_context=True)
+
+    # Get the dispatcher to register handlers
     dp = updater.dispatcher
 
     # Add handlers
     dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
     dp.add_handler(MessageHandler(Filters.status_update.new_chat_members, greet_new_member))
     
-    # Error handler
+    # Log all errors
     dp.add_error_handler(error_handler)
 
     # Start the Bot
     updater.start_polling()
     logger.info("🚀 Бот запущено! / Bot started!")
+    
+    # Run the bot until you press Ctrl-C
     updater.idle()
 
 if __name__ == "__main__":
