@@ -1,9 +1,10 @@
 import os
 import logging
 import asyncio
+import time
+import httpx
 from telegram import Update
 from telegram.ext import Application, ContextTypes, MessageHandler, filters
-import httpx
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -14,6 +15,7 @@ API_TOKEN = os.getenv("BOT_TOKEN")
 OPENROUTER_KEY = os.getenv("OPENROUTER_API_KEY")
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
+# Configure logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -21,6 +23,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 def should_respond(text: str) -> bool:
+    """Check if the bot should respond to this message."""
     text_lower = text.lower().strip()
     words = text_lower.split()
 
@@ -37,6 +40,7 @@ def should_respond(text: str) -> bool:
     return False
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle incoming messages."""
     if not update.message or not update.message.text:
         return
 
@@ -98,6 +102,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await update.message.reply_text(ai_reply)
 
 async def greet_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Greet new members."""
     if not update.message or not update.message.new_chat_members:
         return
 
@@ -108,21 +113,29 @@ async def greet_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             "Якщо маєш питання по Clash of Clans — пиши мені!"
         )
 
-async def main():
-    """Run the bot."""
-    application = Application.builder().token(API_TOKEN).build()
-    
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, greet_new_member))
-    
-    logger.info("🚀 Бот запущено! / Bot started!")
-    await application.run_polling()
+async def post_init(application: Application) -> None:
+    """Post-initialization tasks."""
+    await application.bot.set_my_commands([
+        ("start", "Start the bot"),
+        ("help", "Show help")
+    ])
 
-if __name__ == "__main__":
+async def main() -> None:
+    """Run the bot with auto-restart."""
     while True:
         try:
-            asyncio.run(main())
+            application = Application.builder().token(API_TOKEN).post_init(post_init).build()
+            
+            application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+            application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, greet_new_member))
+            
+            logger.info("🚀 Бот запущено! / Bot started!")
+            await application.run_polling()
+            
         except Exception as e:
             logger.error(f"⚠️ Збій! Перезапуск через 10 сек... / Crash! Restarting in 10 sec... Error: {e}")
-            time.sleep(10)
-            
+            await asyncio.sleep(10)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+    
