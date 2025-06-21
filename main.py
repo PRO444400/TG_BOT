@@ -1,38 +1,25 @@
 import os
 import logging
 import time
+import httpx
 from telegram import Update
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
-import httpx
 from dotenv import load_dotenv
-from flask import Flask
-from threading import Thread
 
 # Load environment variables
 load_dotenv()
-
-# ===== Flask Keep-Alive Server =====
-app = Flask(__name__)
-
-@app.route('/')
-def home():
-    return "🤖 Бот працює! / Bot is running!"
-
-def run_flask():
-    app.run(host='0.0.0.0', port=8080)
-
-# Start Flask in a separate thread
-Thread(target=run_flask, daemon=True).start()
 
 # ===== Bot Configuration =====
 API_TOKEN = os.getenv("BOT_TOKEN")
 OPENROUTER_KEY = os.getenv("OPENROUTER_API_KEY")
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
+# Configure logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
+logger = logging.getLogger(__name__)
 
 def should_respond(text: str) -> bool:
     text_lower = text.lower().strip()
@@ -51,6 +38,9 @@ def should_respond(text: str) -> bool:
     return False
 
 def handle_message(update: Update, context: CallbackContext):
+    if not update.message or not update.message.text:
+        return
+
     user_message = update.message.text
 
     if not should_respond(user_message):
@@ -103,12 +93,15 @@ def handle_message(update: Update, context: CallbackContext):
             data = response.json()
             ai_reply = data["choices"][0]["message"]["content"]
     except Exception as e:
-        logging.error(f"OpenRouter API error: {e}")
+        logger.error(f"OpenRouter API error: {e}")
         ai_reply = "Вибач, сталася помилка при спробі відповісти."
 
     update.message.reply_text(ai_reply)
 
 def greet_new_member(update: Update, context: CallbackContext):
+    if not update.message or not update.message.new_chat_members:
+        return
+
     for member in update.message.new_chat_members:
         name = member.first_name or "новачок"
         update.message.reply_text(
@@ -116,23 +109,30 @@ def greet_new_member(update: Update, context: CallbackContext):
             "Якщо маєш питання по Clash of Clans — пиши мені!"
         )
 
+def error_handler(update: Update, context: CallbackContext):
+    logger.error(f"Update {update} caused error {context.error}")
+
 def main():
-    while True:
-        try:
-            updater = Updater(API_TOKEN, use_context=True)
-            dp = updater.dispatcher
-            
-            dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
-            dp.add_handler(MessageHandler(Filters.status_update.new_chat_members, greet_new_member))
-            
-            logging.info("🚀 Бот запущено! / Bot started!")
-            updater.start_polling()
-            updater.idle()
-            
-        except Exception as e:
-            logging.error(f"⚠️ Збій! Перезапуск через 10 сек... / Crash! Restarting in 10 sec... Error: {e}")
-            time.sleep(10)
+    updater = Updater(API_TOKEN, use_context=True)
+    dp = updater.dispatcher
+
+    # Add handlers
+    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
+    dp.add_handler(MessageHandler(Filters.status_update.new_chat_members, greet_new_member))
+    
+    # Error handler
+    dp.add_error_handler(error_handler)
+
+    # Start the Bot
+    updater.start_polling()
+    logger.info("🚀 Бот запущено! / Bot started!")
+    updater.idle()
 
 if __name__ == "__main__":
-    main()
-    
+    while True:
+        try:
+            main()
+        except Exception as e:
+            logger.error(f"⚠️ Збій! Перезапуск через 10 сек... / Crash! Restarting in 10 sec... Error: {e}")
+            time.sleep(10)
+            
