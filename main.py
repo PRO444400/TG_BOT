@@ -102,20 +102,29 @@ async def greet_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Якщо маєш питання по Clash of Clans — пиши мені!"
         )
 
-async def main():
-    application = Application.builder().token(API_TOKEN).build()
-    
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, greet_new_member))
-    
-    logging.info("🚀 Бот запущено! / Bot started!")
-    await application.run_polling()
+async def run_bot():
+    """Run the bot with proper error handling."""
+    application = None
+    try:
+        application = Application.builder().token(API_TOKEN).build()
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+        application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, greet_new_member))
+        
+        logging.info("🚀 Бот запущено! / Bot started!")
+        await application.run_polling()
+    except asyncio.CancelledError:
+        pass
+    except Exception as e:
+        logging.error(f"⚠️ Збій! Перезапуск через 10 сек... / Crash! Restarting in 10 sec... Error: {e}")
+        if application:
+            await application.stop()
+        raise
 
 if __name__ == "__main__":
     while True:
         try:
-            asyncio.run(main())
+            asyncio.run(run_bot())
         except Exception as e:
-            logging.error(f"⚠️ Збій! Перезапуск через 10 сек... / Crash! Restarting in 10 sec... Error: {e}")
+            logging.error(f"⚠️ Критичний збій! Перезапуск... / Critical crash! Restarting... Error: {e}")
             time.sleep(10)
             
