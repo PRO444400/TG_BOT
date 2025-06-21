@@ -1,6 +1,6 @@
 python-telegram-bot==20.7
-Flask
-requests
-python-dotenv
-telegram
-httpx
+python-telegram-bot==13.7
+httpx==0.25.2
+python-dotenv==1.0.0
+flask==2.3.2
+requests==2.31.0
