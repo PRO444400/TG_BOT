@@ -23,20 +23,20 @@ def run_flask():
     app.run(host='0.0.0.0', port=8080)
 
 # ===== Self-Ping Function =====
-def self_ping():
-    while True:
-        try:
-            # Auto-detect Replit URL
-            repl_url = f"https://{os.getenv('REPL_SLUG')}.{os.getenv('REPL_OWNER')}.repl.co"
-            requests.get(repl_url, timeout=5)
-            logging.info("🔄 Successful self-ping")
-        except Exception as e:
-            logging.error(f"❌ Ping failed: {e}")
-        time.sleep(300)  # Ping every 5 minutes
+#def self_ping():
+ #   while True:
+  #      try:
+   #         # Auto-detect Replit URL
+    #        repl_url = f"https://{os.getenv('REPL_SLUG')}.{os.getenv('REPL_OWNER')}.repl.co"
+     #       requests.get(repl_url, timeout=5)
+      #      logging.info("🔄 Successful self-ping")
+       # except Exception as e:
+        #    logging.error(f"❌ Ping failed: {e}")
+       # time.sleep(300)  # Ping every 5 minutes
 
 # ===== Start Keep-Alive Services =====
-Thread(target=run_flask, daemon=True).start()
-Thread(target=self_ping, daemon=True).start()
+#Thread(target=run_flask, daemon=True).start()
+#Thread(target=self_ping, daemon=True).start()
 
 # ===== Bot Configuration =====
 API_TOKEN = os.getenv("BOT_TOKEN")
