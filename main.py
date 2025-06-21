@@ -114,31 +114,48 @@ async def greet_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         )
 
 async def run_bot():
-    """Main bot running function with proper error handling"""
+    """Run the bot with proper lifecycle management"""
     application = None
     try:
+        # Create and configure application
         application = Application.builder().token(API_TOKEN).build()
         
         # Add handlers
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
         application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, greet_new_member))
         
-        logger.info("🚀 Бот запущено! / Bot started!")
-        await application.run_polling()
+        # Initialize
+        await application.initialize()
+        await application.start()
+        if application.updater:
+            await application.updater.start_polling()
         
+        logger.info("🚀 Бот успішно запущений! / Bot started successfully!")
+        
+        # Keep the application running
+        while True:
+            await asyncio.sleep(1)
+            
     except asyncio.CancelledError:
         pass
     except Exception as e:
-        logger.error(f"Bot error: {e}")
-        if application:
-            await application.stop()
-        raise
+        logger.error(f"Помилка бота: {e} / Bot error: {e}")
+    finally:
+        logger.info("🛑 Зупинка бота... / Stopping bot...")
+        try:
+            if application:
+                if application.updater:
+                    await application.updater.stop()
+                await application.stop()
+                await application.shutdown()
+        except Exception as e:
+            logger.error(f"Помилка при зупинці: {e} / Shutdown error: {e}")
 
 if __name__ == "__main__":
     while True:
         try:
             asyncio.run(run_bot())
         except Exception as e:
-            logger.error(f"⚠️ Збій! Перезапуск через 10 сек... / Crash! Restarting in 10 sec... Error: {e}")
+            logger.error(f"⚠️ Перезапуск через 10 сек... / Restarting in 10 sec... Error: {e}")
             time.sleep(10)
             
