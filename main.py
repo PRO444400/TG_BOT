@@ -1,9 +1,9 @@
 import os
 import logging
-import time
-import httpx
+import asyncio
 from telegram import Update
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+from telegram.ext import Application, ContextTypes, MessageHandler, filters
+import httpx
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -14,7 +14,6 @@ API_TOKEN = os.getenv("BOT_TOKEN")
 OPENROUTER_KEY = os.getenv("OPENROUTER_API_KEY")
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-# Configure logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -37,7 +36,7 @@ def should_respond(text: str) -> bool:
 
     return False
 
-def handle_message(update: Update, context: CallbackContext):
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message or not update.message.text:
         return
 
@@ -58,11 +57,11 @@ def handle_message(update: Update, context: CallbackContext):
     key = user_message.lower().strip()
 
     if key in simple_responses:
-        update.message.reply_text(simple_responses[key])
+        await update.message.reply_text(simple_responses[key])
         return
 
     if "я думаю інакше" in key:
-        update.message.reply_text("Цікава думка! Можеш розповісти більше про Clash of Clans?")
+        await update.message.reply_text("Цікава думка! Можеш розповісти більше про Clash of Clans?")
         return
 
     prompt = [
@@ -87,8 +86,8 @@ def handle_message(update: Update, context: CallbackContext):
     }
 
     try:
-        with httpx.Client() as client:
-            response = client.post(OPENROUTER_URL, headers=headers, json=json_data)
+        async with httpx.AsyncClient() as client:
+            response = await client.post(OPENROUTER_URL, headers=headers, json=json_data)
             response.raise_for_status()
             data = response.json()
             ai_reply = data["choices"][0]["message"]["content"]
@@ -96,47 +95,33 @@ def handle_message(update: Update, context: CallbackContext):
         logger.error(f"OpenRouter API error: {e}")
         ai_reply = "Вибач, сталася помилка при спробі відповісти."
 
-    update.message.reply_text(ai_reply)
+    await update.message.reply_text(ai_reply)
 
-def greet_new_member(update: Update, context: CallbackContext):
+async def greet_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message or not update.message.new_chat_members:
         return
 
     for member in update.message.new_chat_members:
         name = member.first_name or "новачок"
-        update.message.reply_text(
+        await update.message.reply_text(
             f"Ласкаво просимо в групу, {name}! 🎉 "
             "Якщо маєш питання по Clash of Clans — пиши мені!"
         )
 
-def error_handler(update: Update, context: CallbackContext):
-    logger.error(f"Update {update} caused error {context.error}")
-
-def main():
-    # Create the Updater and pass it your bot's token
-    updater = Updater(API_TOKEN, use_context=True)
-
-    # Get the dispatcher to register handlers
-    dp = updater.dispatcher
-
-    # Add handlers
-    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
-    dp.add_handler(MessageHandler(Filters.status_update.new_chat_members, greet_new_member))
+async def main():
+    """Run the bot."""
+    application = Application.builder().token(API_TOKEN).build()
     
-    # Log all errors
-    dp.add_error_handler(error_handler)
-
-    # Start the Bot
-    updater.start_polling()
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, greet_new_member))
+    
     logger.info("🚀 Бот запущено! / Bot started!")
-    
-    # Run the bot until you press Ctrl-C
-    updater.idle()
+    await application.run_polling()
 
 if __name__ == "__main__":
     while True:
         try:
-            main()
+            asyncio.run(main())
         except Exception as e:
             logger.error(f"⚠️ Збій! Перезапуск через 10 сек... / Crash! Restarting in 10 sec... Error: {e}")
             time.sleep(10)
