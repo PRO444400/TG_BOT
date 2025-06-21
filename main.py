@@ -1,13 +1,14 @@
 import os
 import logging
 from telegram import Update
-from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
+from telegram.ext import Application, ContextTypes, MessageHandler, filters
 import httpx
 from dotenv import load_dotenv
 from flask import Flask
 from threading import Thread
 import requests
 import time
+import asyncio
 
 # Load environment variables
 load_dotenv()
@@ -23,20 +24,20 @@ def run_flask():
     app.run(host='0.0.0.0', port=8080)
 
 # ===== Self-Ping Function =====
-#def self_ping():
- #   while True:
-  #      try:
-   #         # Auto-detect Replit URL
-    #        repl_url = f"https://{os.getenv('REPL_SLUG')}.{os.getenv('REPL_OWNER')}.repl.co"
-     #       requests.get(repl_url, timeout=5)
-      #      logging.info("🔄 Successful self-ping")
-       # except Exception as e:
-        #    logging.error(f"❌ Ping failed: {e}")
-       # time.sleep(300)  # Ping every 5 minutes
+def self_ping():
+    while True:
+        try:
+            # Auto-detect Replit URL
+            repl_url = f"https://{os.getenv('REPL_SLUG')}.{os.getenv('REPL_OWNER')}.repl.co"
+            requests.get(repl_url, timeout=5)
+            logging.info("🔄 Successful self-ping")
+        except Exception as e:
+            logging.error(f"❌ Ping failed: {e}")
+        time.sleep(300)  # Ping every 5 minutes
 
 # ===== Start Keep-Alive Services =====
-#Thread(target=run_flask, daemon=True).start()
-#Thread(target=self_ping, daemon=True).start()
+Thread(target=run_flask, daemon=True).start()
+Thread(target=self_ping, daemon=True).start()
 
 # ===== Bot Configuration =====
 API_TOKEN = os.getenv("BOT_TOKEN")
@@ -130,17 +131,24 @@ async def greet_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Якщо маєш питання по Clash of Clans — пиши мені!"
         )
 
+async def main():
+    """Run the bot."""
+    # Create the Application
+    application = Application.builder().token(API_TOKEN).build()
+
+    # Add handlers
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, greet_new_member))
+
+    # Run the bot
+    logging.info("🚀 Бот запущено! / Bot started!")
+    await application.run_polling()
+
 if __name__ == "__main__":
     # Auto-restart bot on crash
     while True:
         try:
-            bot_app = ApplicationBuilder().token(API_TOKEN).build()
-            bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-            bot_app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, greet_new_member))
-
-            logging.info("🚀 Бот запущено! / Bot started!")
-            bot_app.run_polling()
-
+            asyncio.run(main())
         except Exception as e:
             logging.error(f"⚠️ Збій! Перезапуск через 10 сек... / Crash! Restarting in 10 sec... Error: {e}")
             time.sleep(10)
