@@ -1,14 +1,28 @@
 import os
 import logging
 import time
-import asyncio
 from telegram import Update
-from telegram.ext import Application, ContextTypes, MessageHandler, filters
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
 import httpx
 from dotenv import load_dotenv
+from flask import Flask
+from threading import Thread
 
 # Load environment variables
 load_dotenv()
+
+# ===== Flask Keep-Alive Server =====
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "🤖 Бот працює! / Bot is running!"
+
+def run_flask():
+    app.run(host='0.0.0.0', port=8080)
+
+# Start Flask in a separate thread
+Thread(target=run_flask, daemon=True).start()
 
 # ===== Bot Configuration =====
 API_TOKEN = os.getenv("BOT_TOKEN")
@@ -36,7 +50,7 @@ def should_respond(text: str) -> bool:
 
     return False
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def handle_message(update: Update, context: CallbackContext):
     user_message = update.message.text
 
     if not should_respond(user_message):
@@ -54,11 +68,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     key = user_message.lower().strip()
 
     if key in simple_responses:
-        await update.message.reply_text(simple_responses[key])
+        update.message.reply_text(simple_responses[key])
         return
 
     if "я думаю інакше" in key:
-        await update.message.reply_text("Цікава думка! Можеш розповісти більше про Clash of Clans?")
+        update.message.reply_text("Цікава думка! Можеш розповісти більше про Clash of Clans?")
         return
 
     prompt = [
@@ -83,8 +97,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
 
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(OPENROUTER_URL, headers=headers, json=json_data)
+        with httpx.Client() as client:
+            response = client.post(OPENROUTER_URL, headers=headers, json=json_data)
             response.raise_for_status()
             data = response.json()
             ai_reply = data["choices"][0]["message"]["content"]
@@ -92,39 +106,33 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logging.error(f"OpenRouter API error: {e}")
         ai_reply = "Вибач, сталася помилка при спробі відповісти."
 
-    await update.message.reply_text(ai_reply)
+    update.message.reply_text(ai_reply)
 
-async def greet_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def greet_new_member(update: Update, context: CallbackContext):
     for member in update.message.new_chat_members:
         name = member.first_name or "новачок"
-        await update.message.reply_text(
+        update.message.reply_text(
             f"Ласкаво просимо в групу, {name}! 🎉 "
             "Якщо маєш питання по Clash of Clans — пиши мені!"
         )
 
-async def run_bot():
-    """Run the bot with proper error handling."""
-    application = None
-    try:
-        application = Application.builder().token(API_TOKEN).build()
-        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-        application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, greet_new_member))
-        
-        logging.info("🚀 Бот запущено! / Bot started!")
-        await application.run_polling()
-    except asyncio.CancelledError:
-        pass
-    except Exception as e:
-        logging.error(f"⚠️ Збій! Перезапуск через 10 сек... / Crash! Restarting in 10 sec... Error: {e}")
-        if application:
-            await application.stop()
-        raise
-
-if __name__ == "__main__":
+def main():
     while True:
         try:
-            asyncio.run(run_bot())
-        except Exception as e:
-            logging.error(f"⚠️ Критичний збій! Перезапуск... / Critical crash! Restarting... Error: {e}")
-            time.sleep(10)
+            updater = Updater(API_TOKEN, use_context=True)
+            dp = updater.dispatcher
             
+            dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
+            dp.add_handler(MessageHandler(Filters.status_update.new_chat_members, greet_new_member))
+            
+            logging.info("🚀 Бот запущено! / Bot started!")
+            updater.start_polling()
+            updater.idle()
+            
+        except Exception as e:
+            logging.error(f"⚠️ Збій! Перезапуск через 10 сек... / Crash! Restarting in 10 sec... Error: {e}")
+            time.sleep(10)
+
+if __name__ == "__main__":
+    main()
+    
